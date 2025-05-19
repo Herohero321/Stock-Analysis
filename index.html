@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stock Analysis</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0 }
+    body {
+      font-family: Arial, sans-serif;
+      display: flex; flex-direction: column; min-height: 100vh;
+      transition: background 0.3s, color 0.3s;
+    }
+    body {
+      background: #121212; color: #eee;
+    }
+    .navbar {
+      background: #1f1f1f; color: #eee;
+      padding: 16px; text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    .navbar h1 {
+      display: inline-block; margin-right: 8px;
+      font-size: 1.6rem;
+    }
+    .navbar input {
+      padding: 8px; font-size: 1rem;
+      width: 200px; max-width: 60%;
+      background: #222; color: #eee;
+      border: 1px solid #444;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      transition: background 0.3s, color 0.3s, box-shadow 0.3s;
+      margin-right: 8px;
+    }
+    .btn {
+      padding: 8px 16px; border: none; border-radius: 4px;
+      cursor: pointer; font-size: 1rem;
+    }
+    .btn-primary {
+      background: #007bff; color: #fff;
+    }
+    .btn-primary:hover { background: #0056b3 }
+    .btn-toggle {
+      background: #6c757d; color: #fff;
+      margin-left: 8px;
+    }
+    .btn-toggle:hover { background: #5a6268 }
+
+    main {
+      flex: 1; padding: 20px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .chart-wrapper {
+      position: relative;
+      width: 100%; max-width: 960px;
+    }
+    #chartdiv { height: 500px; }
+    #drawCanvas {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 500px;
+      cursor: crosshair; display: none;
+    }
+
+    .controls-bottom {
+      margin-top: 16px;
+      display: flex; flex-wrap: wrap; gap: 12px;
+      justify-content: center; align-items: center;
+    }
+    .controls-bottom label {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 1rem;
+      transition: color 0.3s;
+    }
+    .controls-bottom button {
+      padding: 6px 12px; font-size: .9rem;
+      border: none; border-radius: 4px;
+      background: #17a2b8; color: #fff; cursor: pointer;
+    }
+    .controls-bottom button:hover { background: #0f6674 }
+
+    .metrics {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      justify-content: center; margin-top: 20px;
+    }
+    .card {
+      background: #1f1f1f; padding: 16px; border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      text-align: center; width: 120px;
+      transition: background 0.3s, color 0.3s;
+    }
+    .card h2 {
+      font-size: 1rem; margin-bottom: 8px;
+      color: #bbb;
+      transition: color 0.3s;
+    }
+    .card p {
+      font-size: 1.4rem; color: #fff;
+      transition: color 0.3s;
+    }
+
+    #errorBox {
+      display: none; position: fixed;
+      top: 20px; left: 20px;
+      background: #b71c1c; color: #fff;
+      padding: 12px 16px; border-radius: 4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      z-index: 1000;
+    }
+    #errorBox button {
+      background: #fff; color: #b71c1c;
+      border: none; padding: 4px 8px; border-radius: 2px;
+      cursor: pointer; font-size: .9rem; margin-left: 8px;
+    }
+
+    body.light-mode {
+      background: #f0f2f5; color: #333;
+    }
+    body.light-mode .navbar {
+      background: #fff; color: #333;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    body.light-mode .navbar input {
+      background: #fff; color: #333;
+      border: 1px solid #ccc;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    body.light-mode .card {
+      background: #fff; color: #333;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    body.light-mode .card h2 { color: #555 }
+    body.light-mode .card p  { color: #222 }
+    body.light-mode .controls-bottom label {
+      color: #333;
+    }
+  </style>
+
+  <script src="https://cdn.amcharts.com/lib/5/index.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/xy.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/themes/Dark.js"></script>
+</head>
+<body>
+
+  <!-- Error Box -->
+  <div id="errorBox">
+    <span id="errorMsg">—</span>
+    <button id="reportBtn">Report</button>
+  </div>
+
+  <header class="navbar">
+    <h1>Stock Analysis</h1>
+    <input id="symbolInput" type="text" placeholder="e.g. AAPL" value="AAPL"/>
+    <button id="searchBtn" class="btn btn-primary">Search</button>
+    <button id="toggleTheme" class="btn btn-toggle" title="Toggle theme">🌙</button>
+  </header>
+
+  <main>
+    <div class="chart-wrapper">
+      <div id="chartdiv"></div>
+      <canvas id="drawCanvas"></canvas>
+    </div>
+
+    <div class="controls-bottom">
+      <label><input type="checkbox" id="chkClose" checked/> Close</label>
+      <label><input type="checkbox" id="chkCandle"/> Candlestick</label>
+      <label><input type="checkbox" id="chkVolume"/> Volume</label>
+      <label><input type="checkbox" id="chkSMA" checked/> SMA(10)</label>
+      <label><input type="checkbox" id="chkRSI"/> RSI(14)</label>
+      <label><input type="checkbox" id="chkMACD"/> MACD</label>
+      <label><input type="checkbox" id="chkPred"/> Prediction</label>
+      <button id="freeDrawBtn">Free Draw</button>
+      <button id="undoBtn">Undo</button>
+      <button id="clearDrawBtn">Clear Drawing</button>
+    </div>
+
+    <div class="metrics">
+      <div class="card"><h2>SMA (10)</h2><p id="cardSMA">–</p></div>
+      <div class="card"><h2>RSI (14)</h2><p id="cardRSI">–</p></div>
+      <div class="card"><h2>MACD</h2><p id="cardMACD">–</p></div>
+      <div class="card"><h2>Next Price</h2><p id="cardPred">–</p></div>
+    </div>
+  </main>
+
+  <script>
+    // Global for the highlight line
+    let highlightRange;
+
+    // Error Handling
+    function showError(msg) {
+      const box = document.getElementById("errorBox");
+      document.getElementById("errorMsg").textContent = msg;
+      box.style.display = "block";
+      setTimeout(() => box.style.display = "none", 5000);
+    }
+    document.getElementById("reportBtn").addEventListener("click", () => {
+      const txt = encodeURIComponent(document.getElementById("errorMsg").textContent);
+      window.location.href = `mailto:support@example.com?subject=Bug Report&body=${txt}`;
+    });
+
+    // Data & Indicators
+    const API_KEY = "iuaYSx6MhNpQPwKZ73n31hKZodxwaTNd";
+    async function fetchFMP(sym) {
+      try {
+        const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${encodeURIComponent(sym)}?apikey=${API_KEY}`;
+        const res = await fetch(url), j = await res.json();
+        if (!j.historical) throw new Error("No data for ticker: " + sym);
+        return j.historical.slice(0,30).reverse().map(d=>({
+          date:d.date, open:d.open, high:d.high,
+          low:d.low, close:d.close, volume:d.volume
+        }));
+      } catch(e) {
+        showError("Error fetching data: " + e.message);
+        throw e;
+      }
+    }
+    function computeSMA(data,p=10){ return data.map((d,i,a)=>({
+      date:d.date,
+      sma: i<p-1? null : a.slice(i-p+1,i+1).reduce((s,v)=>s+v.close,0)/p
+    })); }
+    function computeRSI(data,p=14){
+      let g=0,l=0;
+      for(let i=1;i<=p;i++){
+        const diff = data[i].close-data[i-1].close;
+        diff>0? g+=diff: l-=diff;
+      }
+      let avgG=g/p, avgL=l/p;
+      return data.map((d,i,a)=>{ if(i<p) return {date:d.date,rsi:null};
+        const diff = d.close-a[i-1].close;
+        avgG=(avgG*(p-1)+Math.max(diff,0))/p;
+        avgL=(avgL*(p-1)+Math.max(-diff,0))/p;
+        const rs=avgG/(avgL||1);
+        return {date:d.date, rsi:100-(100/(1+rs))};
+      });
+    }
+    function computeMACD(data,f=12,s=26){
+      const ema=(v,n)=>{const k=2/(n+1);let e=v[0],out=[e];
+        for(let i=1;i<v.length;i++){e=v[i]*k+e*(1-k);out.push(e);}return out;};
+      const c=data.map(d=>d.close), fast=ema(c,f), slow=ema(c,s);
+      return data.map((d,i)=>({date:d.date,macd:fast[i]-slow[i]}));
+    }
+    function linReg(data){
+      const n=data.length,x=data.map((_,i)=>i),y=data.map(d=>d.close),
+            sx=x.reduce((a,b)=>a+b,0), sy=y.reduce((a,b)=>a+b,0),
+            sxy=x.map((v,i)=>v*y[i]).reduce((a,b)=>a+b,0),
+            sxx=x.map(v=>v*v).reduce((a,b)=>a+b,0),
+            m=(n*sxy-sx*sy)/(n*sxx-sx*sx), b=(sy-m*sx)/n;
+      return data.map((d,i)=>({date:d.date,pred:b+m*i}));
+    }
+
+    // Chart & Theme Toggle
+    let isDark = true;
+    let root, chart, xAxis, yAxis;
+    let lineSeries, candleSeries, volumeSeries;
+    let smaSeries, rsiSeries, macdSeries, predSeries;
+    let canvas, ctx, drawing=false, strokes=[], currentStroke;
+
+    function createChart(){
+      if(root) root.dispose();
+      root = am5.Root.new("chartdiv");
+      const themesArr = [];
+      if(isDark) themesArr.push(am5themes_Dark.new(root));
+      themesArr.push(am5themes_Animated.new(root));
+      root.setThemes(themesArr);
+
+      chart = root.container.children.push(
+        am5xy.XYChart.new(root,{ panX:true, panY:true, wheelX:"panX", wheelY:"zoomX" })
+      );
+
+      xAxis = chart.xAxes.push(
+        am5xy.CategoryAxis.new(root,{ categoryField:"date",
+          renderer:am5xy.AxisRendererX.new(root,{ grid:{strokeOpacity:0.15} })
+        })
+      );
+      xAxis.get("renderer").labels.template.setAll({
+        rotation:-45,
+        fill: isDark? am5.color(0xeeeeee) : am5.color(0x333333)
+      });
+      xAxis.setAll({ startLocation:0, endLocation:1 });
+
+      yAxis = chart.yAxes.push(
+        am5xy.ValueAxis.new(root,{ renderer:am5xy.AxisRendererY.new(root,{ grid:{strokeOpacity:0.15} }) })
+      );
+      yAxis.get("renderer").labels.template.setAll({
+        fill: isDark? am5.color(0xeeeeee) : am5.color(0x333333)
+      });
+
+      lineSeries = chart.series.push(
+        am5xy.LineSeries.new(root,{
+          name:"Close", xAxis, yAxis,
+          categoryXField:"date", valueYField:"close",
+          stroke:am5.color(0x28a745),
+          fill:am5.color(0x28a745), fillOpacity:0.2,
+          tooltip:am5.Tooltip.new(root,{labelText:"{valueY}"})
+        })
+      );
+      lineSeries.strokes.template.setAll({strokeWidth:2});
+      lineSeries.setAll({startLocation:0,endLocation:1});
+      lineSeries.bullets.push((root,series,dataItem)=>{
+        const circle = am5.Circle.new(root,{radius:4,fill:series.get("stroke")});
+        circle.events.on("pointerdown",()=>{
+          if(highlightRange) highlightRange.dispose();
+          highlightRange = yAxis.createAxisRange({value: dataItem.get("valueY")});
+          highlightRange.get("grid").setAll({
+            stroke:am5.color(0xff0000),
+            strokeWidth:2,
+            strokeOpacity:0.8
+          });
+          highlightRange.get("label").setAll({
+            text: dataItem.get("valueY").toFixed(2),
+            inside: false,
+            location: 0,
+            paddingRight: 8,
+            fill: am5.color(0xff0000),
+            fontWeight: "bold"
+          });
+        });
+        return am5.Bullet.new(root,{sprite: circle});
+      });
+
+      candleSeries = chart.series.push(
+        am5xy.CandlestickSeries.new(root,{
+          name:"Candlestick", xAxis, yAxis,
+          categoryXField:"date", openValueYField:"open",
+          highValueYField:"high", lowValueYField:"low", valueYField:"close",
+          tooltip:am5.Tooltip.new(root,{labelText:"O:{openValueY}\nH:{highValueY}\nL:{lowValueY}\nC:{valueY}"})
+        })
+      );
+      candleSeries.set("hidden",true);
+
+      volumeSeries = chart.series.push(
+        am5xy.ColumnSeries.new(root,{
+          name:"Volume", xAxis, yAxis,
+          categoryXField:"date", valueYField:"volume",
+          clustered:false,
+          tooltip:am5.Tooltip.new(root,{labelText:"{valueY}"})
+        })
+      );
+      volumeSeries.columns.template.setAll({fillOpacity:0.15});
+      volumeSeries.set("hidden",true);
+
+      smaSeries = chart.series.push(
+        am5xy.LineSeries.new(root,{
+          name:"10-Day SMA", xAxis, yAxis,
+          categoryXField:"date", valueYField:"sma",
+          stroke:am5.color(0xffa500), strokeDasharray:[4,4],
+          strokeWidth:2, strokeOpacity:0.8
+        })
+      );
+      smaSeries.setAll({startLocation:0,endLocation:1});
+      rsiSeries = chart.series.push(
+        am5xy.LineSeries.new(root,{
+          name:"RSI(14)", xAxis, yAxis,
+          categoryXField:"date", valueYField:"rsi",
+          stroke:am5.color(0x6f42c1), strokeDasharray:[2,2],
+          strokeWidth:2, strokeOpacity:0.8
+        })
+      );
+      rsiSeries.setAll({startLocation:0,endLocation:1});
+      rsiSeries.set("hidden",true);
+      macdSeries = chart.series.push(
+        am5xy.LineSeries.new(root,{
+          name:"MACD", xAxis, yAxis,
+          categoryXField:"date", valueYField:"macd",
+          stroke:am5.color(0xdc3545), strokeWidth:2, strokeOpacity:0.8
+        })
+      );
+      macdSeries.setAll({startLocation:0,endLocation:1});
+      macdSeries.set("hidden",true);
+      predSeries = chart.series.push(
+        am5xy.LineSeries.new(root,{
+          name:"Prediction", xAxis, yAxis,
+          categoryXField:"date", valueYField:"pred",
+          stroke:am5.color(0x007bff), strokeDasharray:[3,3],
+          strokeWidth:2, strokeOpacity:0.8
+        })
+      );
+      predSeries.setAll({startLocation:0,endLocation:1});
+      predSeries.set("hidden",true);
+
+      chart.set("cursor",am5xy.XYCursor.new(root,{behavior:"zoomXY"}));
+
+      const map={Close:lineSeries,Candle:candleSeries,Volume:volumeSeries,
+                 SMA:smaSeries,RSI:rsiSeries,MACD:macdSeries,Pred:predSeries};
+      for(let id in map){
+        document.getElementById("chk"+id).onchange = e =>
+          e.target.checked? map[id].show(): map[id].hide();
+      }
+
+      canvas = document.getElementById("drawCanvas");
+      ctx    = canvas.getContext("2d");
+      const rect = document.getElementById("chartdiv").getBoundingClientRect();
+      canvas.width  = rect.width;
+      canvas.height = rect.height;
+
+      document.getElementById("freeDrawBtn").onclick = ()=>{
+        drawing = !drawing;
+        canvas.style.display = drawing? "block":"none";
+      };
+      document.getElementById("undoBtn").onclick = ()=>{
+        strokes.pop();
+        redrawAll();
+      };
+      document.getElementById("clearDrawBtn").onclick = ()=>{
+        strokes = [];
+        redrawAll();
+      };
+
+      canvas.onpointerdown = e=>{
+        if(!drawing) return;
+        currentStroke=[{x:e.offsetX,y:e.offsetY}];
+        strokes.push(currentStroke);
+        canvas.setPointerCapture(e.pointerId);
+      };
+      canvas.onpointermove = e=>{
+        if(!drawing||!currentStroke) return;
+        currentStroke.push({x:e.offsetX,y:e.offsetY});
+        redrawAll();
+      };
+      canvas.onpointerup = e=>{
+        currentStroke=null;
+        canvas.releasePointerCapture(e.pointerId);
+      };
+
+      function redrawAll(){
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.strokeStyle="#fff"; ctx.lineWidth=2;
+        strokes.forEach(stroke=>{
+          if(stroke.length<2) return;
+          ctx.beginPath();
+          ctx.moveTo(stroke[0].x,stroke[0].y);
+          stroke.slice(1).forEach(pt=>ctx.lineTo(pt.x,pt.y));
+          ctx.stroke();
+        });
+      }
+
+      updateChart();
+    }
+
+    am5.ready(createChart);
+
+    document.getElementById("toggleTheme").onclick = ()=>{
+      isDark = !isDark;
+      document.body.classList.toggle("light-mode", !isDark);
+      document.getElementById("toggleTheme").textContent = isDark? "🌙":"☀️";
+      createChart();
+    };
+
+    document.getElementById("searchBtn").onclick = updateChart;
+    async function updateChart(){
+      const sym = document.getElementById("symbolInput").value.trim()||"AAPL";
+      try {
+        const data = await fetchFMP(sym);
+        xAxis.data.setAll(data);
+        lineSeries.data.setAll(data);
+        candleSeries.data.setAll(data);
+        volumeSeries.data.setAll(data);
+        smaSeries.data.setAll(computeSMA(data,10));
+        rsiSeries.data.setAll(computeRSI(data,14));
+        macdSeries.data.setAll(computeMACD(data,12,26));
+        predSeries.data.setAll(linReg(data));
+        document.getElementById("cardSMA").textContent =
+          smaSeries.dataItems.filter(di=>di.dataContext.sma!==null).pop().dataContext.sma.toFixed(2);
+        document.getElementById("cardRSI").textContent =
+          rsiSeries.dataItems.filter(di=>di.dataContext.rsi!==null).pop().dataContext.rsi.toFixed(2);
+        document.getElementById("cardMACD").textContent =
+          macdSeries.dataItems.pop().dataContext.macd.toFixed(2);
+        document.getElementById("cardPred").textContent =
+          predSeries.dataItems.pop().dataContext.pred.toFixed(2);
+        candleSeries.hide(); volumeSeries.hide();
+        smaSeries.show(); rsiSeries.hide();
+        macdSeries.hide(); predSeries.hide();
+        ["Candle","Volume","RSI","MACD","Pred"].forEach(id=>
+          document.getElementById("chk"+id).checked=false
+        );
+        document.getElementById("chkClose").checked=true;
+        document.getElementById("chkSMA").checked=true;
+        drawing=false;
+        document.getElementById("drawCanvas").style.display="none";
+        redrawAll();
+        chart.zoomOut();
+      } catch(e){}
+    }
+  </script>
+</body>
+</html>
